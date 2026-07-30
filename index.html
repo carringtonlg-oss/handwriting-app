@@ -1,0 +1,964 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#F4F7FA">
+<title>Letter Pad</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-180.png">
+<style>
+  :root{
+    --paper:#F4F7FA;
+    --card:#FFFFFF;
+    --rule-blue:#A8C2DE;
+    --rule-red:#D9453F;
+    --ink:#28313D;
+    --ink-soft:#6B7787;
+    --ghost:#C3D2E0;
+    --crayon:#F5B942;
+    --done:#3E9E85;
+    --shadow:rgba(40,49,61,.10);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;overflow:hidden;overscroll-behavior:none;
+    -webkit-touch-callout:none;-webkit-user-select:none;user-select:none;
+    touch-action:none}          /* iOS ignores user-scalable=no; this it honours */
+  body{
+    background:var(--paper);color:var(--ink);
+    font-family:"Chalkboard SE","Bradley Hand","Comic Sans MS",system-ui,sans-serif;
+  }
+  .screen{position:fixed;inset:0;display:none;flex-direction:column}
+  .screen.on{display:flex}
+
+  /* ---------- picker ---------- */
+  #picker{overflow-y:auto;padding:22px 22px 40px;touch-action:pan-y}  /* scroll yes, pinch no */
+  #picker.on{display:block}
+  h1{font-size:30px;margin:6px 0 2px;letter-spacing:.5px}
+  .sub{color:var(--ink-soft);font-size:15px;margin:0 0 18px;
+    font-family:system-ui,-apple-system,sans-serif}
+  .rail{display:flex;gap:8px;flex-wrap:wrap;min-height:46px;align-items:center;
+    background:var(--card);border-radius:16px;padding:10px 12px;margin-bottom:22px;
+    box-shadow:0 2px 10px var(--shadow)}
+  .rail .empty{color:var(--ink-soft);font-size:14px;
+    font-family:system-ui,-apple-system,sans-serif}
+  .rail span.got{font-size:24px;line-height:1;color:var(--done);
+    animation:pop .35s cubic-bezier(.2,1.5,.4,1)}
+  @keyframes pop{from{transform:scale(.2);opacity:0}to{transform:scale(1);opacity:1}}
+  .eyebrow{font-size:12px;letter-spacing:2.5px;text-transform:uppercase;
+    color:var(--ink-soft);margin:0 0 10px;font-family:system-ui,-apple-system,sans-serif}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(66px,1fr));
+    gap:10px;margin-bottom:26px}
+  .tile{background:var(--card);border:none;border-radius:14px;aspect-ratio:1;
+    font-family:inherit;font-size:30px;color:var(--ink);cursor:pointer;
+    box-shadow:0 2px 8px var(--shadow);display:flex;align-items:center;
+    justify-content:center;position:relative;transition:transform .12s}
+  .tile:active{transform:scale(.93)}
+  .tile.done{color:var(--done);background:#EAF6F2}
+  .tile.done::after{content:"";position:absolute;top:7px;right:9px;width:6px;height:6px;
+    border-radius:50%;background:var(--done)}
+  .tile:focus-visible{outline:3px solid var(--crayon);outline-offset:2px}
+  .wide{display:flex;gap:12px;flex-wrap:wrap}
+  .btn{font-family:inherit;font-size:18px;padding:14px 22px;border:none;
+    border-radius:14px;background:var(--card);color:var(--ink);cursor:pointer;
+    box-shadow:0 2px 8px var(--shadow)}
+  .btn:active{transform:scale(.96)}
+  .btn:focus-visible{outline:3px solid var(--crayon);outline-offset:2px}
+  .opt{display:flex;align-items:center;gap:10px;margin-top:14px;color:var(--ink-soft);
+    font-size:15px;font-family:system-ui,-apple-system,sans-serif}
+  .opt input{width:22px;height:22px;accent-color:var(--done)}
+
+  /* ---------- practice ---------- */
+  #practice{background:var(--paper)}
+  .bar{display:flex;align-items:center;gap:12px;padding:12px 16px;flex:0 0 auto}
+  .bar .spacer{flex:1}
+  .icon{font-family:system-ui,-apple-system,sans-serif;font-size:17px;
+    padding:11px 16px;border:none;border-radius:12px;background:var(--card);
+    color:var(--ink-soft);cursor:pointer;box-shadow:0 2px 8px var(--shadow)}
+  .icon:active{transform:scale(.95)}
+  .icon:focus-visible{outline:3px solid var(--crayon);outline-offset:2px}
+  .icon.go{background:var(--done);color:#fff;font-size:19px;padding:13px 26px}
+  .icon.hide{visibility:hidden;pointer-events:none}
+  #cue{font-size:17px;color:var(--ink-soft);font-family:system-ui,-apple-system,sans-serif}
+  #stage{flex:1;position:relative;min-height:0}
+  canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;display:block}
+  #cheer{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(.4);
+    font-size:88px;opacity:0;pointer-events:none;transition:none}
+  #cheer.on{animation:cheer 1s ease-out}
+  @keyframes cheer{
+    0%{opacity:0;transform:translate(-50%,-50%) scale(.4)}
+    25%{opacity:1;transform:translate(-50%,-50%) scale(1.15)}
+    70%{opacity:1;transform:translate(-50%,-50%) scale(1)}
+    100%{opacity:0;transform:translate(-50%,-58%) scale(1)}
+  }
+  /* phones: the header has to give up room for the paper */
+  @media (max-width:560px){
+    .bar{padding:8px 10px;gap:7px}
+    #cue{display:none}
+    .icon{font-size:15px;padding:10px 13px}
+    .icon.go{font-size:16px;padding:11px 17px}
+    #picker{padding:16px 16px 32px}
+    h1{font-size:25px}
+    .grid{grid-template-columns:repeat(auto-fill,minmax(54px,1fr));gap:8px}
+    .tile{font-size:25px}
+  }
+  @media (max-height:470px){
+    .bar{padding:6px 10px}
+    #cue{display:none}
+  }
+  #oops{position:fixed;left:8px;right:8px;bottom:8px;z-index:99;background:#2A1214;
+    color:#FFD9D6;font-family:ui-monospace,Menlo,monospace;font-size:12px;line-height:1.45;
+    padding:10px 12px;border-radius:12px;white-space:pre-wrap;max-height:40%;overflow:auto}
+  @media (prefers-reduced-motion:reduce){
+    *{animation-duration:.01ms !important;transition-duration:.01ms !important}
+  }
+</style>
+</head>
+<body>
+
+<section id="picker" class="screen on">
+  <h1>Letter Pad</h1>
+  <p class="sub">Trace the dotted letter, then write it on your own.</p>
+  <div class="rail" id="rail"><span class="empty">Letters you finish today show up here.</span></div>
+
+  <p class="eyebrow">Big letters</p>
+  <div class="grid" id="gridUpper"></div>
+
+  <p class="eyebrow">Little letters</p>
+  <div class="grid" id="gridLower"></div>
+
+  <div class="wide">
+    <button class="btn" id="btnDoodle">Blank page for doodling</button>
+    <button class="btn" id="btnReset">Clear today</button>
+  </div>
+  <label class="opt"><input type="checkbox" id="penOnly"> Apple Pencil only (ignore fingers and palm)</label>
+</section>
+
+<div id="oops" hidden></div>
+
+<section id="practice" class="screen">
+  <div class="bar">
+    <button class="icon" id="btnBack">All letters</button>
+    <span id="cue">Trace the dots</span>
+    <span class="spacer"></span>
+    <button class="icon" id="btnUndo">Undo</button>
+    <button class="icon go" id="btnDone">Done</button>
+    <button class="icon" id="btnNext">Next</button>
+  </div>
+  <div id="stage">
+    <canvas id="cv"></canvas>
+    <div id="cheer">🌟</div>
+  </div>
+</section>
+
+<script>
+/* ============================================================
+   Letter shapes.
+   Coordinate space per letter: x 0..100, y 0..175
+     y=10  top line (cap height / ascender)
+     y=65  dashed middle line (x-height)
+     y=120 baseline (red)
+     y=165 descender line
+   Each letter is an ordered list of strokes = SVG path strings.
+   ============================================================ */
+const LETTERS = {
+  A:["M50,10 L18,120","M50,10 L82,120","M28,85 L72,85"],
+  B:["M22,10 L22,120","M22,10 L55,10 A27.5,27.5 0 0 1 55,65 L22,65","M22,65 L58,65 A27.5,27.5 0 0 1 58,120 L22,120"],
+  C:["M75,32 A32,55 0 1 0 75,98"],
+  D:["M22,10 L22,120","M22,10 L48,10 A30,55 0 0 1 48,120 L22,120"],
+  E:["M24,10 L24,120","M24,10 L78,10","M24,65 L68,65","M24,120 L78,120"],
+  F:["M24,10 L24,120","M24,10 L78,10","M24,65 L68,65"],
+  G:["M75,32 A32,55 0 1 0 75,98","M75,98 L81,93 L81,70 L59,70"],
+  H:["M24,10 L24,120","M78,10 L78,120","M24,65 L78,65"],
+  I:["M50,10 L50,120","M30,10 L70,10","M30,120 L70,120"],
+  J:["M60,10 L60,98 A21,21 0 0 1 18,98"],
+  K:["M24,10 L24,120","M76,12 L26,66","M26,66 L78,120"],
+  L:["M26,10 L26,120","M26,120 L78,120"],
+  M:["M22,120 L22,10 L50,70 L78,10 L78,120"],
+  N:["M22,120 L22,10 L78,120 L78,10"],
+  O:["M50,10 A32,55 0 1 0 50,120 A32,55 0 1 0 50,10"],
+  P:["M24,10 L24,120","M24,10 L56,10 A28,28 0 0 1 56,66 L24,66"],
+  Q:["M50,10 A32,55 0 1 0 50,120 A32,55 0 1 0 50,10","M60,96 L84,126"],
+  R:["M24,10 L24,120","M24,10 L56,10 A28,28 0 0 1 56,66 L24,66","M24,66 L78,120"],
+  S:["M76,30 C70,12 46,6 32,18 C18,30 24,52 44,62 C66,72 78,82 74,100 C70,117 44,126 24,109"],
+  T:["M50,10 L50,120","M20,10 L80,10"],
+  U:["M22,10 L22,90 A28,30 0 0 0 78,90 L78,10"],
+  V:["M22,10 L50,120 L78,10"],
+  W:["M18,10 L34,120 L50,40 L66,120 L82,10"],
+  X:["M22,10 L78,120","M78,10 L22,120"],
+  Y:["M22,10 L50,65","M78,10 L50,65","M50,65 L50,120"],
+  Z:["M22,10 L78,10 L22,120 L78,120"],
+
+  a:["M70,72 A24,27.5 0 1 0 70,113","M70,65 L70,120"],
+  b:["M26,10 L26,120","M26,65 A23,27.5 0 1 1 26,120"],
+  c:["M70,78 A24,27.5 0 1 0 70,107"],
+  d:["M70,65 A23,27.5 0 1 0 70,120","M70,10 L70,120"],
+  e:["M24,95 L68,95","M68,95 C68,72 40,60 26,78 C14,94 20,116 40,118 C54,119 62,112 68,104"],
+  f:["M64,22 C60,10 44,12 44,30 L44,120","M26,65 L62,65"],
+  g:["M70,78 A24,27.5 0 1 0 70,107","M70,65 L70,142 A22,22 0 0 1 28,145"],
+  h:["M26,10 L26,120","M26,88 A23,23 0 0 1 72,88 L72,120"],
+  i:["M50,65 L50,120","M50,40 L50,46"],
+  j:["M54,65 L54,142 A20,20 0 0 1 16,144","M54,40 L54,46"],
+  k:["M26,10 L26,120","M66,65 L28,98","M28,98 L70,120"],
+  l:["M50,10 L50,120"],
+  m:["M18,65 L18,120","M18,84 A16,16 0 0 1 50,84 L50,120","M50,84 A16,16 0 0 1 82,84 L82,120"],
+  n:["M26,65 L26,120","M26,86 A23,23 0 0 1 72,86 L72,120"],
+  o:["M48,65 A24,27.5 0 1 0 48,120 A24,27.5 0 1 0 48,65"],
+  p:["M26,65 L26,165","M26,65 A23,27.5 0 1 1 26,120"],
+  q:["M70,65 A23,27.5 0 1 0 70,120","M70,65 L70,165"],
+  r:["M28,65 L28,120","M28,88 C28,70 48,62 66,70"],
+  s:["M64,76 C58,64 34,62 28,74 C22,86 40,92 48,95 C58,99 70,102 66,113 C62,122 36,122 28,112"],
+  t:["M50,20 L50,103 C50,117 62,122 72,115","M30,65 L70,65"],
+  u:["M26,65 L26,97 A23,23 0 0 0 72,97 L72,65","M72,65 L72,120"],
+  v:["M26,65 L50,120 L74,65"],
+  w:["M18,65 L34,120 L50,72 L66,120 L82,65"],
+  x:["M26,65 L72,120","M72,65 L26,120"],
+  y:["M26,65 L52,120","M74,65 L38,165"],
+  z:["M26,65 L72,65 L26,120 L72,120"]
+};
+const ORDER = Object.keys(LETTERS);
+const GOAL = 5;   // a set of five letters is about one 4-year-old sitting
+const UPPER = ORDER.filter(c => c === c.toUpperCase());
+const LOWER = ORDER.filter(c => c !== c.toUpperCase());
+
+function sliceFrac(pts, a, b){
+  const n = pts.length, i = Math.max(0, Math.floor(n*a)), j = Math.min(n, Math.ceil(n*b));
+  return pts.slice(i, Math.max(i+2, j));
+}
+function plen(p){ let s=0; for (let i=1;i<p.length;i++) s+=Math.hypot(p[i].x-p[i-1].x,p[i].y-p[i-1].y); return s; }
+function resample(p, n){
+  const cum=[0];
+  for (let i=1;i<p.length;i++) cum.push(cum[i-1]+Math.hypot(p[i].x-p[i-1].x,p[i].y-p[i-1].y));
+  const total=cum[cum.length-1];
+  if (!(total>0)) return new Array(n).fill(p[0]);
+  const out=[]; let j=1;
+  for (let k=0;k<n;k++){
+    const target=total*k/(n-1);
+    while (j<cum.length-1 && cum[j]<target) j++;
+    const seg=cum[j]-cum[j-1], t=seg>0?(target-cum[j-1])/seg:0;
+    out.push({x:p[j-1].x+(p[j].x-p[j-1].x)*t, y:p[j-1].y+(p[j].y-p[j-1].y)*t});
+  }
+  return out;
+}
+/* ---------- turn the path strings into point lists (own maths, cached) ---------- */
+function arcPoints(x1,y1,rx,ry,deg,fa,fs,x2,y2,n){
+  const phi=deg*Math.PI/180, cp=Math.cos(phi), sp=Math.sin(phi);
+  const dx=(x1-x2)/2, dy=(y1-y2)/2;
+  const x1p= cp*dx+sp*dy, y1p=-sp*dx+cp*dy;
+  rx=Math.abs(rx); ry=Math.abs(ry);
+  const lam=(x1p*x1p)/(rx*rx)+(y1p*y1p)/(ry*ry);
+  if (lam>1){ const k=Math.sqrt(lam); rx*=k; ry*=k; }
+  const num=rx*rx*ry*ry-rx*rx*y1p*y1p-ry*ry*x1p*x1p;
+  const den=rx*rx*y1p*y1p+ry*ry*x1p*x1p;
+  let co=Math.sqrt(Math.max(0,num/den));
+  if (fa===fs) co=-co;
+  const cxp=co*rx*y1p/ry, cyp=-co*ry*x1p/rx;
+  const cx=cp*cxp-sp*cyp+(x1+x2)/2, cy=sp*cxp+cp*cyp+(y1+y2)/2;
+  const ang=(ux,uy,vx,vy)=>{
+    let d=(ux*vx+uy*vy)/(Math.hypot(ux,uy)*Math.hypot(vx,vy));
+    d=Math.max(-1,Math.min(1,d));
+    let a=Math.acos(d);
+    if (ux*vy-uy*vx<0) a=-a;
+    return a;
+  };
+  const th1=ang(1,0,(x1p-cxp)/rx,(y1p-cyp)/ry);
+  let dth=ang((x1p-cxp)/rx,(y1p-cyp)/ry,(-x1p-cxp)/rx,(-y1p-cyp)/ry);
+  if (fs===0 && dth>0) dth-=2*Math.PI;
+  if (fs===1 && dth<0) dth+=2*Math.PI;
+  const out=[];
+  for (let i=1;i<=n;i++){
+    const t=th1+dth*i/n;
+    out.push({x:cx+rx*Math.cos(t)*cp-ry*Math.sin(t)*sp,
+              y:cy+rx*Math.cos(t)*sp+ry*Math.sin(t)*cp});
+  }
+  return out;
+}
+function pathPoints(d){
+  const toks = d.match(/[MLCA][^MLCA]*/g) || [];
+  let cur = {x:0,y:0};
+  const pts = [];
+  for (const t of toks){
+    const cmd = t[0];
+    const a = (t.slice(1).match(/-?\d*\.?\d+/g) || []).map(Number);
+    if (cmd === 'M'){ cur = {x:a[0], y:a[1]}; pts.push(cur); }
+    else if (cmd === 'L'){
+      for (let i=0;i<a.length;i+=2){
+        const nx = {x:a[i], y:a[i+1]};
+        const steps = Math.max(2, Math.round(Math.hypot(nx.x-cur.x, nx.y-cur.y)/2));
+        for (let k=1;k<=steps;k++)
+          pts.push({x:cur.x+(nx.x-cur.x)*k/steps, y:cur.y+(nx.y-cur.y)*k/steps});
+        cur = nx;
+      }
+    }
+    else if (cmd === 'C'){
+      for (let i=0;i<a.length;i+=6){
+        const p0=cur, p1={x:a[i],y:a[i+1]}, p2={x:a[i+2],y:a[i+3]}, p3={x:a[i+4],y:a[i+5]};
+        for (let k=1;k<=40;k++){
+          const s=k/40, u=1-s;
+          pts.push({x:u*u*u*p0.x+3*u*u*s*p1.x+3*u*s*s*p2.x+s*s*s*p3.x,
+                    y:u*u*u*p0.y+3*u*u*s*p1.y+3*u*s*s*p2.y+s*s*s*p3.y});
+        }
+        cur = p3;
+      }
+    }
+    else if (cmd === 'A'){
+      for (let i=0;i<a.length;i+=7){
+        const seg = arcPoints(cur.x,cur.y,a[i],a[i+1],a[i+2],a[i+3],a[i+4],a[i+5],a[i+6],72);
+        for (const p of seg) pts.push(p);
+        cur = seg[seg.length-1];
+      }
+    }
+  }
+  return pts.length ? pts : [{x:50,y:65}];
+}
+const sampleCache = {};
+function samples(ch){
+  if (!ch || !LETTERS[ch]) return [];
+  if (sampleCache[ch]) return sampleCache[ch];
+  const out = LETTERS[ch].map(d => {
+    const raw = pathPoints(d);
+    const len = plen(raw);
+    return resample(raw, Math.max(4, Math.round(len / 3)));
+  });
+  sampleCache[ch] = out;
+  return out;
+}
+
+/* ============================================================ */
+const cv  = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const stage = document.getElementById('stage');
+const cheer = document.getElementById('cheer');
+const cueEl = document.getElementById('cue');
+
+const S = {
+  ch:null,           // current letter, or null for doodle
+  phase:'idle',      // 'idle' | 'trace' | 'copy' | 'doodle'
+  strokeIx:0,        // which guide stroke is next
+  traced:[],         // accepted ink in box 1
+  copied:[],         // free ink in box 2
+  live:null,         // stroke in progress
+  fading:[],         // strokes fading out after a miss
+  pointer:null,      // active pointerId
+  penSeen:false,
+  wiggle:0,
+  miss:0,
+  prog:0,          // fraction of the current stroke already inked
+  stars:0,         // letters finished in this set
+  starPop:0,       // animation on the newest star
+  review:0,        // fades the model over his own writing after Done
+  done:new Set()
+};
+let L = {};          // layout, recomputed on resize
+
+/* ---------- layout ---------- */
+function layout(){
+  const r = stage.getBoundingClientRect();
+  if (r.width < 2 || r.height < 2){ L.W = 0; L.H = 0; return; }
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  cv.width  = Math.round(r.width  * dpr);
+  cv.height = Math.round(r.height * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  const W = r.width, H = r.height;
+  let scale = Math.min(H * 0.66 / 175, 2.6);   // leaves room for the model letter
+  const boxRatio = 1.34, gapRatio = 0.28;
+  let boxW = 100 * scale * boxRatio;
+  let gap  = 100 * scale * gapRatio;
+  const avail = W - 32;
+  if (boxW * 2 + gap > avail){
+    scale *= avail / (boxW * 2 + gap);
+    boxW = 100 * scale * boxRatio;
+    gap  = 100 * scale * gapRatio;
+  }
+  const paperH = 175 * scale;
+  const left = (W - (boxW * 2 + gap)) / 2;
+
+  // The model letter sits above the paper: this is the letter he is writing.
+  const gapM = 16;
+  let modelH = Math.max(46, Math.min(paperH * 0.34, 150));
+  if (modelH + gapM + paperH > H - 8){
+    modelH = H - 8 - gapM - paperH;
+    if (modelH < 36) modelH = 0;               // too cramped, drop it rather than squash it
+  }
+  const block  = paperH + (modelH ? modelH + gapM : 0);
+  const modelY = Math.max(4, (H - block) / 2);
+  const top    = modelY + (modelH ? modelH + gapM : 0);
+
+  L = {W,H,scale,boxW,gap,paperH,top,modelH,modelY,
+       boxes:[{x:left, ox:left + (boxW - 100*scale)/2},
+              {x:left + boxW + gap, ox:left + boxW + gap + (boxW - 100*scale)/2}]};
+}
+const toPx = (b,p) => ({x: L.boxes[b].ox + p.x * L.scale, y: L.top + p.y * L.scale});
+const toLetter = (b,x,y) => ({x:(x - L.boxes[b].ox)/L.scale, y:(y - L.top)/L.scale});
+function boxAt(x){
+  for (let i=0;i<2;i++){ const b=L.boxes[i]; if (x >= b.x-8 && x <= b.x+L.boxW+8) return i; }
+  return -1;
+}
+
+/* ---------- drawing ---------- */
+function rules(){
+  const lines = [[10,'--rule-blue',1.5,false],[65,'--rule-blue',1.5,true],
+                 [120,'--rule-red',2.5,false],[165,'--rule-blue',1,true]];
+  const x0 = L.boxes[0].x, x1 = L.boxes[1].x + L.boxW;
+  ctx.save();
+  for (const [y,varname,w,dashed] of lines){
+    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue(varname).trim();
+    ctx.lineWidth = w;
+    ctx.globalAlpha = dashed ? .75 : 1;
+    ctx.setLineDash(dashed ? [7,9] : []);
+    const py = L.top + y * L.scale;
+    ctx.beginPath(); ctx.moveTo(x0, py); ctx.lineTo(x1, py); ctx.stroke();
+  }
+  ctx.restore();
+}
+function boxBg(i, active){
+  const r = 18;
+  ctx.save();
+  ctx.fillStyle = active ? 'rgba(245,185,66,.10)' : 'rgba(255,255,255,.62)';
+  ctx.beginPath();
+  ctx.roundRect(L.boxes[i].x, L.top - 14*L.scale/2, L.boxW, L.paperH + 14*L.scale, r);
+  ctx.fill();
+  if (active){
+    ctx.strokeStyle = 'rgba(245,185,66,.85)';
+    ctx.lineWidth = 3; ctx.setLineDash([]); ctx.stroke();
+  }
+  ctx.restore();
+}
+function guideStroke(box, pts, state){
+  // state: 'next' | 'later' | 'done'
+  ctx.save();
+  if (state === 'done'){ ctx.restore(); return; }
+  if (state === 'next' && S.miss >= 2){
+    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--crayon').trim();
+    ctx.globalAlpha = .5; ctx.lineWidth = 9 * L.scale / 1.9;
+    ctx.lineCap = 'round'; ctx.setLineDash([]);
+    ctx.beginPath();
+    pts.forEach((p, i) => { const q = toPx(box, p); i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y); });
+    ctx.stroke(); ctx.globalAlpha = 1;
+  }
+  const step = 3;
+  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--ghost').trim();
+  ctx.globalAlpha = state === 'next' ? 1 : .45;
+  const rad = Math.max(1.6, 2.4 * L.scale / 1.9);
+  for (let i = 0; i < pts.length; i += step){
+    const p = toPx(box, pts[i]);
+    ctx.beginPath(); ctx.arc(p.x, p.y, rad, 0, 6.284); ctx.fill();
+  }
+  if (state === 'next'){
+    const p = toPx(box, pts[0]);
+    const pulse = 1 + Math.sin(performance.now()/260) * .16;
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--done').trim();
+    ctx.beginPath(); ctx.arc(p.x, p.y, 7.5*L.scale/1.9*pulse, 0, 6.284); ctx.fill();
+    // direction arrow a little way along the stroke
+    const q = pts[Math.min(pts.length-1, Math.round(pts.length*0.16))];
+    const qp = toPx(box, q);
+    const a = Math.atan2(qp.y-p.y, qp.x-p.x), s = 9*L.scale/1.9;
+    ctx.beginPath();
+    ctx.moveTo(qp.x + Math.cos(a)*s, qp.y + Math.sin(a)*s);
+    ctx.lineTo(qp.x + Math.cos(a+2.5)*s, qp.y + Math.sin(a+2.5)*s);
+    ctx.lineTo(qp.x + Math.cos(a-2.5)*s, qp.y + Math.sin(a-2.5)*s);
+    ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+}
+function inkStroke(st, alpha){
+  if (st.pts.length < 2) {
+    const p = toPx(st.box, st.pts[0]);
+    ctx.beginPath(); ctx.arc(p.x, p.y, st.w[0]/2, 0, 6.284);
+    ctx.fillStyle = st.color; ctx.globalAlpha = alpha; ctx.fill(); ctx.globalAlpha = 1;
+    return;
+  }
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.strokeStyle = st.color;
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.setLineDash([]);
+  for (let i = 1; i < st.pts.length; i++){
+    const a = toPx(st.box, st.pts[i-1]), b = toPx(st.box, st.pts[i]);
+    ctx.lineWidth = (st.w[i-1] + st.w[i]) / 2;
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+  }
+  ctx.restore();
+}
+let lastW = 0, lastH = 0;
+/* The letter he is meant to be writing, shown the way a worksheet prints a
+   model at the start of the row: on its own little ruled lines, fully inked. */
+function drawModel(){
+  if (!L.modelH || !S.ch) return;
+  const sc = L.modelH / 175;
+  const w  = 100 * sc;
+  const cx = (L.boxes[0].x + L.boxes[1].x + L.boxW) / 2;
+  const x  = cx - w / 2;
+  const y  = L.modelY;
+  const padX = Math.max(16, 26 * sc), padY = Math.max(8, 12 * sc);
+  const css = getComputedStyle(document.documentElement);
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(255,255,255,.9)';
+  ctx.beginPath();
+  ctx.roundRect(x - padX, y - padY, w + padX * 2, L.modelH + padY * 2, 14);
+  ctx.fill();
+
+  ctx.setLineDash([]);
+  const rules = [[10, '--rule-blue', 1, false], [65, '--rule-blue', 1, true],
+                 [120, '--rule-red', 1.6, false]];
+  for (const [u, name, lw, dash] of rules){
+    ctx.strokeStyle = css.getPropertyValue(name).trim();
+    ctx.lineWidth = lw;
+    ctx.setLineDash(dash ? [4, 5] : []);
+    ctx.globalAlpha = dash ? .7 : .9;
+    ctx.beginPath();
+    ctx.moveTo(x - padX * 0.6, y + 
+      u * sc); ctx.lineTo(x + w + padX * 0.6, y + u * sc);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  ctx.setLineDash([]);
+  ctx.strokeStyle = css.getPropertyValue('--ink').trim();
+  ctx.lineWidth = Math.max(2.2, 4.4 * sc);
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  for (const st of samples(S.ch)){
+    ctx.beginPath();
+    st.forEach((p, i) => {
+      const px = x + p.x * sc, py = y + p.y * sc;
+      i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+    });
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+function starShape(cx, cy, r, filled){
+  ctx.beginPath();
+  for (let k = 0; k < 10; k++){
+    const rad = (k % 2) ? r * 0.44 : r;
+    const a = -Math.PI/2 + k * Math.PI/5;
+    const px = cx + Math.cos(a)*rad, py = cy + Math.sin(a)*rad;
+    k ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+  }
+  ctx.closePath();
+  const css = getComputedStyle(document.documentElement);
+  if (filled){
+    ctx.fillStyle = css.getPropertyValue('--crayon').trim();
+    ctx.fill();
+  } else {
+    ctx.strokeStyle = 'rgba(40,49,61,.16)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+}
+/* Five stars under the paper. They only ever fill up — a wrong stroke never
+   takes one away. The point is to see the set getting closer to finished. */
+function drawStars(){
+  const below = L.H - (L.top + L.paperH);
+  if (below < 34) return;
+  const r  = Math.max(9, Math.min(17, L.paperH * 0.055));
+  const cy = L.top + L.paperH + Math.min(below / 2, r * 2.2);
+  const gap = r * 2.7;
+  const x0 = (L.boxes[0].x + L.boxes[1].x + L.boxW) / 2 - gap * (GOAL - 1) / 2;
+  for (let i = 0; i < GOAL; i++){
+    const filled = i < S.stars;
+    const pop = (filled && i === S.stars - 1 && S.starPop > 0) ? 1 + 0.5 * S.starPop : 1;
+    ctx.save();
+    starShape(x0 + i * gap, cy, r * pop, filled);
+    ctx.restore();
+  }
+}
+function render(){
+  try {
+    // The canvas can be measured before the page has its real size (in an
+    // iframe, a just-shown screen, a rotation). Keep re-measuring until it is
+    // real, and whenever it changes, instead of sitting blank forever.
+    const r = stage.getBoundingClientRect();
+    if (Math.abs(r.width - lastW) > 1 || Math.abs(r.height - lastH) > 1){
+      lastW = r.width; lastH = r.height;
+      layout();
+    }
+    paint();
+  } catch (err) { report(err); }        // one bad frame must never kill the loop
+  requestAnimationFrame(render);
+}
+function paint(){
+  if (!L.W || !L.H) return;
+  ctx.clearRect(0, 0, L.W, L.H);
+  if (S.phase === 'idle') return;
+  const doodle = S.phase === 'doodle';
+  if (doodle){
+    ctx.save();
+    ctx.fillStyle = 'rgba(255,255,255,.72)';
+    ctx.beginPath(); ctx.roundRect(10, 10, L.W-20, L.H-20, 20); ctx.fill();
+    ctx.restore();
+  } else {
+    drawModel();
+    boxBg(0, S.phase === 'trace');
+    boxBg(1, S.phase === 'copy');
+    rules();
+    const sm = samples(S.ch);
+    const wig = S.wiggle > 0 ? Math.sin(performance.now()/40) * S.wiggle : 0;
+    ctx.save(); ctx.translate(wig, 0);
+    sm.forEach((pts, i) => {
+      if (S.phase !== 'trace') return;
+      if (i < S.strokeIx) return;
+      if (i === S.strokeIx) guideStroke(0, sliceFrac(pts, S.prog, 1), 'next');
+      else guideStroke(0, pts, 'later');
+    });
+    ctx.restore();
+  }
+  drawStars();
+  // after Done, the letter he was aiming for appears over his own attempt
+  if (S.review > 0 && S.ch){
+    const a = Math.min(1, S.review * 1.6);
+    ctx.save();
+    ctx.globalAlpha = a * 0.85;
+    for (const pts of samples(S.ch)) guideStroke(1, pts, 'later');
+    ctx.restore();
+  }
+  for (const st of S.traced) inkStroke(st, 1);
+  for (const st of S.copied) inkStroke(st, 1);
+  for (const st of S.fading) inkStroke(st, st.a);
+  if (S.live) inkStroke(S.live, 1);
+
+  if (S.wiggle > 0) S.wiggle = Math.max(0, S.wiggle - 0.35);
+  if (S.starPop > 0) S.starPop = Math.max(0, S.starPop - 0.045);
+  if (S.review > 0) S.review = Math.max(0, S.review - 0.010);
+  for (let i = S.fading.length - 1; i >= 0; i--){
+    S.fading[i].a -= 0.06;
+    if (S.fading[i].a <= 0) S.fading.splice(i, 1);
+  }
+}
+
+/* ---------- did the stroke follow the guide? (forgiving) ---------- */
+function isDot(guide){
+  let mnx=Infinity,mxx=-Infinity,mny=Infinity,mxy=-Infinity;
+  for (const p of guide){ mnx=Math.min(mnx,p.x); mxx=Math.max(mxx,p.x);
+                          mny=Math.min(mny,p.y); mxy=Math.max(mxy,p.y); }
+  return (mxx-mnx) < 14 && (mxy-mny) < 14;
+}
+/* Compare shapes point-for-point along their length. Forgiving about wobble and
+   speed, strict about drawing something that isn't the letter (mirrored, half
+   finished, scribbled over the top). Drawing it backwards still counts. */
+function matches(drawn, guide){
+  if (drawn.length < 4) return false;
+  const lg = plen(guide), ld = plen(drawn);
+  if (lg <= 0) return false;
+  if (ld < lg * 0.55 || ld > lg * 2.8) return false;
+  const N = 40;
+  const d = resample(drawn, N), g = resample(guide, N);
+  const score = a => {
+    let sum = 0, mx = 0;
+    for (let i = 0; i < N; i++){
+      const e = Math.hypot(a[i].x - g[i].x, a[i].y - g[i].y);
+      sum += e; if (e > mx) mx = e;
+    }
+    return {mean: sum / N, max: mx};
+  };
+  const fwd = score(d), rev = score(d.slice().reverse());
+  const best = fwd.mean <= rev.mean ? fwd : rev;
+  return best.mean < 15 && best.max < 34;
+}
+
+/* ---------- if anything goes wrong, say so on screen ---------- */
+function report(e){
+  const box = document.getElementById('oops');
+  if (!box) return;
+  const msg = (e && (e.stack || e.message)) ? (e.stack || e.message) : String(e);
+  box.hidden = false;
+  box.textContent = 'Something broke — screenshot this:\n' + msg;
+  box.onclick = () => { box.hidden = true; };
+}
+window.addEventListener('error', ev => {
+  report(ev.error || (ev.message + '  @ line ' + ev.lineno + ':' + ev.colno));
+});
+window.addEventListener('unhandledrejection', ev => report(ev.reason));
+
+/* ---------- sound ---------- */
+/* iOS starts the audio context suspended until a real user gesture, and
+   resume() is asynchronous. Scheduling notes before it has actually resumed
+   puts them in the past, so they never play. Open it on the first touch, and
+   otherwise wait for the resume to land before scheduling anything. */
+let ac = null, acOpened = false;
+function audioCtx(){
+  if (!ac){
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    try { ac = new AC(); } catch (e) { report(e); return null; }
+  }
+  return ac;
+}
+function unlockAudio(){
+  const c = audioCtx();
+  if (!c) return;
+  if (c.state !== 'running' && c.resume) c.resume().catch(() => {});
+  if (acOpened) return;
+  try {                                   // a silent blip opens the output on iOS
+    const o = c.createOscillator(), g = c.createGain();
+    g.gain.value = 0;
+    o.connect(g); g.connect(c.destination);
+    o.start(); o.stop(c.currentTime + 0.02);
+    acOpened = true;
+  } catch (e) {}
+}
+document.addEventListener('pointerdown', unlockAudio, {passive:true});
+document.addEventListener('touchstart',  unlockAudio, {passive:true});
+
+function tone(freq, at, dur, vol){
+  const o = ac.createOscillator(), g = ac.createGain();
+  o.type = 'sine'; o.frequency.value = freq;
+  const t0 = ac.currentTime + at;
+  g.gain.setValueAtTime(0, t0);
+  g.gain.linearRampToValueAtTime(vol, t0 + 0.012);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  o.connect(g); g.connect(ac.destination);
+  o.start(t0); o.stop(t0 + dur + 0.02);
+}
+function emit(kind, n){
+  if (kind === 'step') tone(784, 0, 0.16, 0.10);
+  if (kind === 'tick') tone(587.33, 0, 0.09, 0.05);
+  if (kind === 'letter') [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => tone(f, i*0.09, 0.42, 0.13));
+  // each letter in the set answers a step higher than the last
+  if (kind === 'star'){
+    const roots = [523.25, 587.33, 659.25, 783.99, 880];
+    const r = roots[Math.min(roots.length - 1, Math.max(0, (n || 1) - 1))];
+    [r, r*1.26, r*1.5].forEach((f, i) => tone(f, i*0.085, 0.4, 0.12));
+  }
+  if (kind === 'set'){
+    [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((f, i) => tone(f, i*0.11, 0.55, 0.13));
+    [261.63, 329.63, 392.0].forEach((f, i) => tone(f, 0.6 + i*0.015, 1.0, 0.07));
+  }
+}
+function sound(kind, n){
+  const c = audioCtx();
+  if (!c) return;
+  try {
+    if (c.state === 'running') emit(kind, n);
+    else if (c.resume) c.resume().then(() => { try { emit(kind, n); } catch (e) { report(e); } })
+                                 .catch(() => {});
+  } catch (e) { report(e); }
+}
+
+/* ---------- pointer plumbing ---------- */
+const penOnly = document.getElementById('penOnly');
+function allowed(e){
+  if (e.pointerType === 'pen'){ S.penSeen = true; return true; }
+  if (penOnly.checked) return false;
+  if (S.penSeen && e.pointerType === 'touch') return false; // auto palm rejection
+  return true;
+}
+function width(e){
+  const base = 3.2 * L.scale / 1.9 * (S.phase === 'doodle' ? 1.3 : 1);
+  const pr = (e.pointerType === 'pen' && e.pressure > 0) ? e.pressure : 0.5;
+  return base * (0.55 + pr * 1.1);
+}
+cv.addEventListener('pointerdown', e => { try {
+  if (S.phase === 'idle' || !L.W) return;
+  if (S.pointer !== null || !allowed(e)) return;
+  const rect = cv.getBoundingClientRect();
+  const x = e.clientX - rect.left, y = e.clientY - rect.top;
+  let box = 0;
+  if (S.phase !== 'doodle'){
+    box = boxAt(x);
+    const want = S.phase === 'trace' ? 0 : 1;
+    if (box !== want){ S.wiggle = 4; return; }
+  }
+  S.pointer = e.pointerId;
+  cv.setPointerCapture(e.pointerId);
+  const p = S.phase === 'doodle' ? {x, y} : toLetter(box, x, y);
+  S.live = {box, pts:[p], w:[width(e)],
+            color:getComputedStyle(document.documentElement).getPropertyValue('--ink').trim()};
+  } catch (err) { report(err); }
+});
+cv.addEventListener('pointermove', e => {
+  if (e.pointerId !== S.pointer || !S.live) return;
+  const rect = cv.getBoundingClientRect();
+  const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
+  const list = evs.length ? evs : [e];
+  for (const ev of list){
+    const p = S.phase === 'doodle'
+      ? {x: ev.clientX - rect.left, y: ev.clientY - rect.top}
+      : toLetter(S.live.box, ev.clientX - rect.left, ev.clientY - rect.top);
+    const last = S.live.pts[S.live.pts.length-1];
+    if (Math.abs(p.x-last.x) + Math.abs(p.y-last.y) < 0.4) continue;
+    S.live.pts.push(p); S.live.w.push(width(ev));
+  }
+});
+function endStroke(){ try { endStroke_(); } catch (err) { report(err); } }
+function endStroke_(){
+  const st = S.live; S.live = null; S.pointer = null;
+  if (!st) return;
+  if (S.phase === 'doodle' || S.phase === 'copy'){ S.copied.push(st); return; }
+  const guide = samples(S.ch)[S.strokeIx];
+  if (isDot(guide)){
+    const c = guide[Math.floor(guide.length/2)];
+    const hit = st.pts.some(p => Math.hypot(p.x-c.x, p.y-c.y) < 22);
+    if (hit){
+      S.traced.push({box:0, pts:[c], w:[Math.max(11, 11*L.scale/1.9)],
+        color:getComputedStyle(document.documentElement).getPropertyValue('--ink').trim()});
+      S.strokeIx++; S.miss = 0;
+      if (S.strokeIx >= LETTERS[S.ch].length){ sound('letter'); toCopy(); } else sound('step');
+    } else { st.a = 1; S.fading.push(st); S.wiggle = 5; S.miss++; }
+    return;
+  }
+  const rem = sliceFrac(guide, S.prog, 1);
+  if (matches(st.pts, rem)){
+    S.traced.push(st);
+    S.strokeIx++; S.miss = 0; S.prog = 0;
+    if (S.strokeIx >= LETTERS[S.ch].length){ sound('letter'); toCopy(); }
+    else sound('step');
+    return;
+  }
+  // did he get part of the way? keep it and let him carry on from there.
+  let got = 0;
+  for (const f of [0.85, 0.7, 0.55, 0.42]){
+    if (matches(st.pts, sliceFrac(rem, 0, f))){ got = f; break; }
+  }
+  if (got > 0){
+    st.partialOf = S.strokeIx;
+    S.traced.push(st);
+    S.prog += (1 - S.prog) * got;
+    S.miss = 0;
+    sound('tick');
+  } else {
+    st.a = 1; S.fading.push(st); S.wiggle = 5; S.miss++;
+  }
+}
+cv.addEventListener('pointerup', e => { if (e.pointerId === S.pointer) endStroke(); });
+cv.addEventListener('pointercancel', e => { if (e.pointerId === S.pointer) endStroke(); });
+cv.addEventListener('lostpointercapture', e => { if (e.pointerId === S.pointer) endStroke(); });
+
+/* ---------- flow ---------- */
+const btnDone = document.getElementById('btnDone');
+const btnNext = document.getElementById('btnNext');
+const btnUndo = document.getElementById('btnUndo');
+
+function setCue(){
+  if (S.phase === 'doodle'){ cueEl.textContent = 'Draw anything you like'; }
+  else if (S.phase === 'trace'){ cueEl.textContent = S.ch + ' — trace the dots, start at the green dot'; }
+  else { cueEl.textContent = 'Now write ' + S.ch + ' in the empty box'; }
+  btnDone.textContent = S.phase === 'doodle' ? 'Clear page' : 'Done';
+  btnDone.classList.toggle('hide', S.phase === 'trace');
+  btnNext.classList.toggle('hide', S.phase === 'doodle');
+}
+function toCopy(){
+  S.phase = 'copy';
+  setCue();
+  cheer.textContent = '🌟';
+  cheer.classList.remove('on'); void cheer.offsetWidth; cheer.classList.add('on');
+}
+function openLetter(ch){ try { openLetter_(ch); } catch (err) { report(err); } }
+function openLetter_(ch){
+  S.ch = ch; S.phase = ch ? 'trace' : 'doodle';
+  S.strokeIx = 0; S.traced = []; S.copied = []; S.fading = []; S.live = null; S.miss = 0; S.prog = 0; S.review = 0;
+  document.getElementById('picker').classList.remove('on');
+  document.getElementById('practice').classList.add('on');
+  layout(); setCue();
+  requestAnimationFrame(layout);   // sizes are real once the screen is actually shown
+}
+function finish(){
+  if (!S.ch){ S.copied = []; return; }
+  S.done.add(S.ch);
+  S.stars = Math.min(GOAL, S.stars + 1);
+  S.starPop = 1;
+  paintRail(); paintGrids();
+  S.review = 1;                        // show him how it compares
+  const full = S.stars >= GOAL;
+  sound(full ? 'set' : 'star', S.stars);
+  cheer.textContent = full ? '🏆' : '🎉';
+  cheer.classList.remove('on'); void cheer.offsetWidth; cheer.classList.add('on');
+  if (full){
+    setTimeout(() => { S.stars = 0; nextLetter(); }, 2600);
+  } else {
+    setTimeout(nextLetter, 1800);
+  }
+}
+function nextLetter(){
+  const i = ORDER.indexOf(S.ch);
+  openLetter(ORDER[(i + 1) % ORDER.length]);
+}
+btnDone.addEventListener('click', finish);
+btnNext.addEventListener('click', nextLetter);
+btnUndo.addEventListener('click', () => {
+  if (S.phase === 'trace'){
+    if (S.prog > 0){
+      while (S.traced.length && S.traced[S.traced.length-1].partialOf === S.strokeIx) S.traced.pop();
+      S.prog = 0;
+    } else if (S.traced.length){
+      S.traced.pop(); S.strokeIx = Math.max(0, S.strokeIx - 1);
+      while (S.traced.length && S.traced[S.traced.length-1].partialOf === S.strokeIx) S.traced.pop();
+    }
+    S.miss = 0;
+  }
+  else if (S.copied.length) S.copied.pop();
+});
+document.getElementById('btnBack').addEventListener('click', () => {
+  document.getElementById('practice').classList.remove('on');
+  document.getElementById('picker').classList.add('on');
+});
+document.getElementById('btnDoodle').addEventListener('click', () => openLetter(null));
+document.getElementById('btnReset').addEventListener('click', () => {
+  S.done.clear(); S.stars = 0; S.starPop = 0; paintRail(); paintGrids();
+});
+
+/* ---------- picker UI ---------- */
+const rail = document.getElementById('rail');
+function paintRail(){
+  rail.innerHTML = '';
+  if (!S.done.size){
+    rail.innerHTML = '<span class="empty">Letters you finish today show up here.</span>';
+    return;
+  }
+  for (const ch of ORDER){
+    if (!S.done.has(ch)) continue;
+    const s = document.createElement('span');
+    s.className = 'got'; s.textContent = ch;
+    rail.appendChild(s);
+  }
+}
+function paintGrids(){
+  for (const [id, set] of [['gridUpper', UPPER], ['gridLower', LOWER]]){
+    const g = document.getElementById(id);
+    g.innerHTML = '';
+    for (const ch of set){
+      const b = document.createElement('button');
+      b.className = 'tile' + (S.done.has(ch) ? ' done' : '');
+      b.textContent = ch;
+      b.setAttribute('aria-label', 'Practice ' + ch);
+      b.addEventListener('click', () => openLetter(ch));
+      g.appendChild(b);
+    }
+  }
+}
+paintGrids(); paintRail();
+
+/* ---------- go ---------- */
+if (!CanvasRenderingContext2D.prototype.roundRect){
+  CanvasRenderingContext2D.prototype.roundRect = function(x,y,w,h,r){
+    this.moveTo(x+r,y); this.arcTo(x+w,y,x+w,y+h,r); this.arcTo(x+w,y+h,x,y+h,r);
+    this.arcTo(x,y+h,x,y,r); this.arcTo(x,y,x+w,y,r); this.closePath();
+  };
+}
+window.addEventListener('resize', layout);
+if (window.ResizeObserver) new ResizeObserver(layout).observe(stage);
+window.addEventListener('orientationchange', () => setTimeout(layout, 250));
+/* A palm, a second finger, or two fingers on the glass used to zoom the page
+   and strand it there, with no way back but a reload. iOS ignores the viewport
+   meta for user-initiated zoom, so block the gestures directly. */
+for (const t of ['gesturestart','gesturechange','gestureend'])
+  document.addEventListener(t, e => e.preventDefault(), {passive:false});
+document.addEventListener('touchstart', e => {
+  if (e.touches && e.touches.length > 1) e.preventDefault();   // pinch needs two
+}, {passive:false});
+document.addEventListener('dblclick', e => e.preventDefault(), {passive:false});
+layout();
+requestAnimationFrame(render);
+
+/* keep a local copy so it opens without wifi */
+if ('serviceWorker' in navigator && location.protocol === 'https:'){
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
+</script>
+</body>
+</html>
