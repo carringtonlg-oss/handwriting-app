@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#F4F7FA">
+<title>Minute Math</title>
+<link rel="apple-touch-icon" href="icon-math-180.png">
+<link rel="icon" type="image/png" href="icon-math-180.png">
+<style>
+  :root{
+    --paper:#F4F7FA; --card:#FFFFFF; --ink:#28313D; --ink-soft:#6B7787;
+    --rule-blue:#A8C2DE; --rule-red:#D9453F; --crayon:#F5B942; --done:#3E9E85;
+    --shadow:rgba(40,49,61,.10);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;overflow:hidden;overscroll-behavior:none;touch-action:none;
+    -webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+  body{background:var(--paper);color:var(--ink);
+    font-family:"Chalkboard SE","Bradley Hand","Comic Sans MS",system-ui,sans-serif}
+
+  .screen{position:fixed;inset:0;display:none;flex-direction:column;align-items:center}
+  .screen.on{display:flex}
+
+  /* ---------- start ---------- */
+  #start{justify-content:center;padding:24px;text-align:center}
+  h1{font-size:clamp(30px,7vw,46px);margin:0 0 6px}
+  .sub{color:var(--ink-soft);font-size:16px;margin:0 0 26px;
+    font-family:system-ui,-apple-system,sans-serif}
+  .choices{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-bottom:26px}
+  .choice{font-family:inherit;font-size:26px;padding:16px 26px;border:3px solid transparent;
+    border-radius:16px;background:var(--card);color:var(--ink);cursor:pointer;
+    box-shadow:0 2px 10px var(--shadow);min-width:104px}
+  .choice.sel{border-color:var(--crayon);background:#FFF9EC}
+  .choice:active{transform:scale(.96)}
+  .go{font-family:inherit;font-size:30px;padding:18px 54px;border:none;border-radius:20px;
+    background:var(--done);color:#fff;cursor:pointer;box-shadow:0 4px 14px rgba(62,158,133,.35)}
+  .go:active{transform:scale(.97)}
+  .best{margin-top:22px;color:var(--ink-soft);font-size:17px}
+  .best b{color:var(--ink);font-size:20px}
+
+  /* ---------- play ---------- */
+  #play{padding:10px 12px 14px}
+  .top{width:100%;max-width:760px;display:flex;align-items:center;gap:12px;flex:0 0 auto}
+  .quit{font-family:system-ui,-apple-system,sans-serif;font-size:15px;padding:9px 13px;border:none;
+    border-radius:11px;background:var(--card);color:var(--ink-soft);box-shadow:0 2px 8px var(--shadow)}
+  #clock{font-variant-numeric:tabular-nums;font-size:22px;min-width:56px;text-align:right}
+  #score{font-size:22px;min-width:44px}
+  .barwrap{flex:1;height:14px;background:#E3E9F0;border-radius:99px;overflow:hidden}
+  #bar{height:100%;width:100%;background:var(--done);border-radius:99px;
+    transition:width .25s linear,background-color .4s}
+  #bar.low{background:var(--rule-red)}
+
+  .sum{flex:1;display:flex;align-items:center;justify-content:center;width:100%;min-height:0}
+  .card{background:var(--card);border-radius:22px;box-shadow:0 3px 16px var(--shadow);
+    padding:min(5vh,30px) min(9vw,52px);text-align:right;line-height:1.05;
+    font-variant-numeric:tabular-nums}
+  .card.good{animation:good .3s}
+  .card.bad{animation:bad .3s}
+  @keyframes good{50%{transform:scale(1.07)}}
+  @keyframes bad{25%{transform:translateX(-9px)}75%{transform:translateX(9px)}}
+  .row{font-size:var(--num)}
+  .oprow{display:flex;justify-content:space-between;gap:26px;font-size:var(--num)}
+  .line{border-bottom:5px solid var(--ink);margin:8px 0 10px}
+  .ansrow{font-size:var(--num);color:var(--done);min-height:1.05em}
+  .ansrow.empty{color:#C9D4E0}
+
+  .pad{width:100%;max-width:760px;display:grid;grid-template-columns:repeat(6,1fr);
+    gap:min(1.6vh,10px);flex:0 0 auto}
+  .key{font-family:inherit;font-size:min(5.4vh,30px);padding:min(2.2vh,16px) 0;border:none;
+    border-radius:14px;background:var(--card);color:var(--ink);cursor:pointer;
+    box-shadow:0 2px 8px var(--shadow)}
+  .key:active{transform:scale(.94);background:#EEF3F8}
+  .key.wrong{animation:bad .3s;background:#FDECEA}
+
+  /* ---------- done ---------- */
+  #done{justify-content:center;padding:24px;text-align:center}
+  #done .huge{font-size:clamp(66px,20vw,140px);line-height:1;margin:6px 0}
+  #done .lbl{color:var(--ink-soft);font-size:18px;font-family:system-ui,-apple-system,sans-serif}
+  #newbest{font-size:26px;color:var(--done);min-height:34px;margin:10px 0 2px}
+  .again{display:flex;gap:12px;margin-top:26px;flex-wrap:wrap;justify-content:center}
+
+  #count{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+    background:rgba(244,247,250,.94);font-size:clamp(80px,26vw,190px);z-index:20}
+  #count.on{display:flex}
+
+  #oops{position:fixed;left:8px;right:8px;bottom:8px;z-index:99;background:#2A1214;
+    color:#FFD9D6;font-family:ui-monospace,Menlo,monospace;font-size:12px;line-height:1.45;
+    padding:10px 12px;border-radius:12px;white-space:pre-wrap;max-height:40%;overflow:auto}
+  @media (prefers-reduced-motion:reduce){
+    *{animation-duration:.01ms !important;transition-duration:.01ms !important}
+  }
+</style>
+</head>
+<body>
+
+<div id="oops" hidden></div>
+
+<section id="start" class="screen on">
+  <h1>Minute Math</h1>
+  <p class="sub">How many can you finish in one minute?</p>
+  <div class="choices">
+    <button class="choice sel" data-mode="add">3 + 2</button>
+    <button class="choice" data-mode="sub">5 − 2</button>
+    <button class="choice" data-mode="both">Both</button>
+  </div>
+  <button class="go" id="btnGo">Start</button>
+  <div class="best" id="bestLine"></div>
+</section>
+
+<section id="play" class="screen">
+  <div class="top">
+    <button class="quit" id="btnQuit">Stop</button>
+    <div class="barwrap"><div id="bar"></div></div>
+    <div id="clock">60</div>
+    <div id="score">0</div>
+  </div>
+  <div class="sum">
+    <div class="card" id="card">
+      <div class="row" id="numA">3</div>
+      <div class="oprow"><span id="op">+</span><span id="numB">2</span></div>
+      <div class="line"></div>
+      <div class="ansrow empty" id="ans">?</div>
+    </div>
+  </div>
+  <div class="pad" id="pad"></div>
+</section>
+
+<section id="done" class="screen">
+  <div class="lbl">You finished</div>
+  <div class="huge" id="finalScore">0</div>
+  <div class="lbl" id="finalLbl">sums in a minute</div>
+  <div id="newbest"></div>
+  <div class="best" id="bestLine2"></div>
+  <div class="again">
+    <button class="go" id="btnAgain">Go again</button>
+    <button class="choice" id="btnHome">Home</button>
+  </div>
+</section>
+
+<div id="count"></div>
+
+<script>
+/* ---------- surface errors rather than dying quietly ---------- */
+function report(e){
+  const box = document.getElementById('oops');
+  if (!box) return;
+  const msg = (e && (e.stack || e.message)) ? (e.stack || e.message) : String(e);
+  box.hidden = false;
+  box.textContent = 'Something broke — screenshot this:\n' + msg;
+  box.onclick = () => { box.hidden = true; };
+}
+window.addEventListener('error', ev => report(ev.error || ev.message));
+window.addEventListener('unhandledrejection', ev => report(ev.reason));
+
+/* ---------- stop the page zooming and stranding itself ---------- */
+for (const t of ['gesturestart','gesturechange','gestureend'])
+  document.addEventListener(t, e => e.preventDefault(), {passive:false});
+document.addEventListener('touchstart', e => {
+  if (e.touches && e.touches.length > 1) e.preventDefault();
+}, {passive:false});
+document.addEventListener('dblclick', e => e.preventDefault(), {passive:false});
+
+/* ---------- sound (same careful unlock as the letter app) ---------- */
+let ac = null, acOpened = false;
+function audioCtx(){
+  if (!ac){
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    try { ac = new AC(); } catch (e) { return null; }
+  }
+  return ac;
+}
+function unlockAudio(){
+  const c = audioCtx();
+  if (!c) return;
+  if (c.state !== 'running' && c.resume) c.resume().catch(() => {});
+  if (acOpened) return;
+  try {
+    const o = c.createOscillator(), g = c.createGain();
+    g.gain.value = 0; o.connect(g); g.connect(c.destination);
+    o.start(); o.stop(c.currentTime + 0.02); acOpened = true;
+  } catch (e) {}
+}
+document.addEventListener('pointerdown', unlockAudio, {passive:true});
+document.addEventListener('touchstart', unlockAudio, {passive:true});
+function tone(freq, at, dur, vol){
+  const o = ac.createOscillator(), g = ac.createGain();
+  o.type = 'sine'; o.frequency.value = freq;
+  const t0 = ac.currentTime + at;
+  g.gain.setValueAtTime(0, t0);
+  g.gain.linearRampToValueAtTime(vol, t0 + 0.012);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  o.connect(g); g.connect(ac.destination);
+  o.start(t0); o.stop(t0 + dur + 0.02);
+}
+function emit(kind, n){
+  if (kind === 'right'){
+    const steps = [523.25, 587.33, 659.25, 698.46, 783.99];
+    const f = steps[Math.min(steps.length - 1, (n || 1) % steps.length)];
+    tone(f, 0, 0.13, 0.10);
+  }
+  if (kind === 'wrong') tone(196, 0, 0.14, 0.06);
+  if (kind === 'tick')  tone(880, 0, 0.06, 0.05);
+  if (kind === 'end')   [523.25, 659.25, 783.99, 1046.5].forEach((f,i) => tone(f, i*0.1, 0.5, 0.12));
+  if (kind === 'best'){
+    [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((f,i) => tone(f, i*0.1, 0.6, 0.13));
+    [392, 523.25].forEach((f,i) => tone(f, 0.55 + i*0.02, 1.0, 0.07));
+  }
+}
+function sound(kind, n){
+  const c = audioCtx();
+  if (!c) return;
+  try {
+    if (c.state === 'running') emit(kind, n);
+    else if (c.resume) c.resume().then(() => { try { emit(kind, n); } catch (e) {} }).catch(() => {});
+  } catch (e) {}
+}
+
+/* ---------- best scores, remembered if the browser allows it ---------- */
+function loadBest(){
+  try {
+    const raw = localStorage.getItem('minutemath.best');
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return {};
+}
+function saveBest(b){
+  try { localStorage.setItem('minutemath.best', JSON.stringify(b)); } catch (e) {}
+}
+let best = loadBest();
+
+/* ---------- the sums ---------- */
+const LIMIT = 10;      // nothing goes above ten, nothing goes below zero
+const SECONDS = 60;
+function rnd(lo, hi){ return lo + Math.floor(Math.random() * (hi - lo + 1)); }
+function makeProblem(mode, avoid){
+  for (let tries = 0; tries < 40; tries++){
+    const kind = mode === 'both' ? (Math.random() < 0.5 ? 'add' : 'sub') : mode;
+    let p;
+    if (kind === 'add'){
+      const a = rnd(1, LIMIT - 1);
+      const b = rnd(1, LIMIT - a);
+      p = {a, b, op:'+', ans:a + b};
+    } else {
+      const a = rnd(2, LIMIT);
+      const b = rnd(1, a - 1);
+      p = {a, b, op:'−', ans:a - b};
+    }
+    if (!avoid || p.a !== avoid.a || p.b !== avoid.b || p.op !== avoid.op) return p;
+  }
+  return {a:1, b:1, op:'+', ans:2};
+}
+
+/* ---------- state ---------- */
+const S = {mode:'add', score:0, left:SECONDS, running:false, problem:null, timer:null, tickAt:0};
+const $ = id => document.getElementById(id);
+function show(which){
+  for (const id of ['start','play','done']) $(id).classList.toggle('on', id === which);
+}
+
+/* ---------- the number pad ---------- */
+const pad = $('pad');
+for (let n = 0; n <= LIMIT; n++){
+  const b = document.createElement('button');
+  b.className = 'key';
+  b.textContent = n;
+  b.dataset.n = n;
+  b.setAttribute('aria-label', 'answer ' + n);
+  b.addEventListener('click', () => answer(n, b));
+  pad.appendChild(b);
+}
+
+function drawProblem(){
+  const p = S.problem;
+  $('numA').textContent = p.a;
+  $('op').textContent = p.op;
+  $('numB').textContent = p.b;
+  $('ans').textContent = '?';
+  $('ans').classList.add('empty');
+  // keep the digits as big as the space allows
+  const card = $('card');
+  card.style.setProperty('--num', 'min(15vh, 78px)');
+}
+function nextProblem(){
+  S.problem = makeProblem(S.mode, S.problem);
+  drawProblem();
+}
+function answer(n, key){
+  if (!S.running) return;
+  const card = $('card');
+  if (n === S.problem.ans){
+    S.score++;
+    $('score').textContent = S.score;
+    $('ans').textContent = n;
+    $('ans').classList.remove('empty');
+    sound('right', S.score);
+    card.classList.remove('good'); void card.offsetWidth; card.classList.add('good');
+    setTimeout(() => { if (S.running) nextProblem(); }, 170);
+  } else {
+    sound('wrong');
+    card.classList.remove('bad'); void card.offsetWidth; card.classList.add('bad');
+    if (key){ key.classList.remove('wrong'); void key.offsetWidth; key.classList.add('wrong'); }
+  }
+}
+
+/* ---------- the clock ---------- */
+function paintClock(){
+  $('clock').textContent = Math.max(0, Math.ceil(S.left));
+  const frac = Math.max(0, S.left / SECONDS);
+  $('bar').style.width = (frac * 100) + '%';
+  $('bar').classList.toggle('low', S.left <= 10);
+}
+function startRun(){
+  S.score = 0; S.left = SECONDS; S.running = true; S.problem = null;
+  $('score').textContent = '0';
+  paintClock();
+  nextProblem();
+  show('play');
+  S.tickAt = Date.now();
+  clearInterval(S.timer);
+  S.timer = setInterval(() => {
+    const now = Date.now();
+    S.left -= (now - S.tickAt) / 1000;
+    S.tickAt = now;
+    if (S.left <= 10 && Math.ceil(S.left) !== Math.ceil(S.left + 0.2)) sound('tick');
+    if (S.left <= 0){ S.left = 0; endRun(); }
+    paintClock();
+  }, 100);
+}
+function countIn(){
+  const el = $('count');
+  let n = 3;
+  el.textContent = n; el.classList.add('on');
+  sound('tick');
+  const iv = setInterval(() => {
+    n--;
+    if (n > 0){ el.textContent = n; sound('tick'); }
+    else {
+      clearInterval(iv);
+      el.textContent = 'Go!';
+      sound('right', 1);
+      setTimeout(() => { el.classList.remove('on'); startRun(); }, 450);
+    }
+  }, 700);
+}
+function endRun(){
+  S.running = false;
+  clearInterval(S.timer);
+  const prev = best[S.mode] || 0;
+  const isBest = S.score > prev;
+  if (isBest){ best[S.mode] = S.score; saveBest(best); }
+  $('finalScore').textContent = S.score;
+  $('finalLbl').textContent = S.score === 1 ? 'sum in a minute' : 'sums in a minute';
+  $('newbest').textContent = isBest && S.score > 0 ? '🏆 New best!' : '';
+  paintBest();
+  show('done');
+  sound(isBest && S.score > 0 ? 'best' : 'end');
+}
+function paintBest(){
+  const b = best[S.mode] || 0;
+  const label = {add:'adding', sub:'taking away', both:'both'}[S.mode];
+  const txt = b ? 'Best at ' + label + ': <b>' + b + '</b>' : '';
+  $('bestLine').innerHTML = txt;
+  $('bestLine2').innerHTML = txt;
+}
+
+/* ---------- wiring ---------- */
+for (const b of document.querySelectorAll('.choice[data-mode]')){
+  b.addEventListener('click', () => {
+    for (const o of document.querySelectorAll('.choice[data-mode]')) o.classList.remove('sel');
+    b.classList.add('sel');
+    S.mode = b.dataset.mode;
+    paintBest();
+  });
+}
+$('btnGo').addEventListener('click', () => { show('play'); countIn(); });
+$('btnAgain').addEventListener('click', () => { show('play'); countIn(); });
+$('btnHome').addEventListener('click', () => { show('start'); paintBest(); });
+$('btnQuit').addEventListener('click', () => { S.left = 0; endRun(); });
+paintBest();
+
+/* keyboard, for a laptop */
+document.addEventListener('keydown', e => {
+  if (!S.running) return;
+  if (e.key >= '0' && e.key <= '9') answer(Number(e.key), null);
+  if (e.key === 'Enter' || e.key === ' ') answer(10, null);
+});
+
+if ('serviceWorker' in navigator && location.protocol === 'https:'){
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
+</script>
+</body>
+</html>
