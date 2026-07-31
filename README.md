@@ -1,3 +1,3 @@
-# handwriting-app
-Handwriting app using Claude
+# learning-app
+learning app using Claude
 
